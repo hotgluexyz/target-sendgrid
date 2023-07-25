@@ -23,12 +23,6 @@ class TargetSendgrid(TargetHotglue):
             "auth_token",
             th.StringType, # Flag config as protected.
             description="The path to the target output file",
-        ),
-        th.Property(
-            'unsubscribe_list_id',
-            th.StringType,
-            description = 'SendGrid List ID of the Unsubscribe list'
-
         )
     ).to_dict()
 
