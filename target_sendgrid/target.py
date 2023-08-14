@@ -7,21 +7,16 @@ from target_hotglue.target import TargetHotglue
 import copy
 from singer_sdk.mapper import PluginMapper
 
-from target_sendgrid.sinks import (
-    sendgridSink,
-    ContactsSink,
-    CustomersSink
-)
+from target_sendgrid.sinks import sendgridSink, ContactsSink, CustomersSink
 
 
 class TargetSendgrid(TargetHotglue):
-    """Sample target for sendgrid."""
     name = "target-sendgrid"
 
     config_jsonschema = th.PropertiesList(
         th.Property(
             "auth_token",
-            th.StringType, # Flag config as protected.
+            th.StringType,  # Flag config as protected.
             description="The path to the target output file",
         )
     ).to_dict()
