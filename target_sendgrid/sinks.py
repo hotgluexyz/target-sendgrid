@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import requests
-
+import time
 from typing import Dict
 from target_hotglue.client import HotglueBatchSink
 
@@ -24,6 +24,38 @@ class ContactsSink(sendgridSink):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.headers = {"Authorization": f"Bearer {self.config.get('auth_token')}"}
+    
+
+    def _process_job_id_and_state(self, job_id):
+        request_not_complete = True
+        while request_not_complete:
+            response = self.request_api(
+                "GET",
+                f"/v3/marketing/contacts/imports/{job_id}",
+                headers=self.headers,
+            )
+            time.sleep(5)
+            if response.json().get("status") == "completed":
+                request_not_complete = False
+        results = response.json().get("results")
+        successful_create_and_deletes = results.get("created_count", 0) + results.get("deleted_count", 0)
+        updated_count = results.get("updated_count", 0)
+        self.logger.info(
+            f"Successfully created/updated/deleted {successful_create_and_deletes} contacts"
+        )
+        failed_upserts = results.get("errored_count", 0)
+        self.logger.info(
+            f"Failed creating/updating/deleting {failed_upserts} contacts"
+        )
+        for _ in range(successful_create_and_deletes):
+            self.state_to_update.append({"success": True})
+        
+        for _ in range(failed_upserts):
+            self.state_to_update.append({"fail": True})
+        
+        for _ in range(updated_count):
+            self.state_to_update.append({"is_updated": True, "success": True})
+
 
     def _unsubscribe(self, unsubscribe_list):
         suppression_payload = {
@@ -39,20 +71,19 @@ class ContactsSink(sendgridSink):
             self.logger.info(
                 f"Successfully unsubscribed {len(response.json()['recipient_emails'])} contacts"
             )
-            self.state_to_update.append({"success": True})
+            for _ in range(unsubscribe_list):
+                self.state_to_update.append({"success": True})
         except Exception as e:
             self.logger.info(
                 f"Error occurred while posting unsubscribed contacts: {e}"
-            )
-            self.state_to_update.append({"success": False})
+            )            
 
 
     def make_batch_request(self, records):
         unsubscribe = []
         subscribed = []
         for record in records:
-            subscribe_status = record["subscribe_status"]
-            del record["subscribe_status"]
+            subscribe_status = record.pop("subscribe_status")
             if subscribe_status == "unsubscribe":
                 unsubscribe.append(record)
             else:
@@ -64,14 +95,10 @@ class ContactsSink(sendgridSink):
             response = self.request_api(
                 "PUT", self.endpoint, request_data=contacts_payload, headers=self.headers
             )
-            self.logger.info(
-                f"Successfully PUT {len(unsubscribe)+len(subscribed)} contacts. SendGrid job id: {response.json()['job_id']}"
-            )
-            self.state_to_update.append({"success": True})
-
         except Exception as e:
             self.logger.info(f"Error occurred while posting subscribed contacts: {e}")
-            self.state_to_update.append({"success": False})
+        
+        self._process_job_id_and_state(response.json()["job_id"])
 
         if len(unsubscribe) > 0:
             self._unsubscribe(unsubscribe)
