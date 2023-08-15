@@ -95,10 +95,10 @@ class ContactsSink(sendgridSink):
             response = self.request_api(
                 "PUT", self.endpoint, request_data=contacts_payload, headers=self.headers
             )
+            self._process_job_id_and_state(response.json()["job_id"])
         except Exception as e:
             self.logger.info(f"Error occurred while posting subscribed contacts: {e}")
         
-        self._process_job_id_and_state(response.json()["job_id"])
 
         if len(unsubscribe) > 0:
             self._unsubscribe(unsubscribe)
@@ -123,8 +123,8 @@ class ContactsSink(sendgridSink):
         
         if record.get("phone_numbers"):
             phone_numbers = record.get("phone_numbers")
-            for phone_number in phone_numbers:
-                row[f"phone_{phone_number.get('type')}"] = phone_number.get("number")
+            if phone_numbers[0].get("number"):
+                row["phone_number"] = phone_numbers[0].get("number")
 
         return row
 
